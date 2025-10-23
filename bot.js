@@ -1,5 +1,5 @@
 // =============================
-// ADMIN BOT (Full Features)
+// ADMIN BOT (Full Features - FINAL FIX)
 // Telegram Bot Version
 // =============================
 
@@ -60,6 +60,7 @@ const activeGames = {};
 // Teks /start
 // =============================
 function sendStartMessage(chatId, chatType) {
+  // (PERBAIKAN 1) Menghapus underscore agar konsisten dengan listener
   let text = `
 🤖 Halo! Saya adalah Bot Admin & Game.
 
@@ -70,8 +71,8 @@ function sendStartMessage(chatId, chatType) {
 /checkbot - Cek status dan hak akses bot.
 
 *Perintah Game (Admin):*
-/mulai_tebak - Memulai game tebak kata.
-/stop_tebak - Menghentikan paksa game tebak kata.
+/mulaitebak - Memulai game tebak kata.
+/stoptebak - Menghentikan paksa game tebak kata.
 
 *Perintah Game (Member):*
 /jawab [kata] - Untuk menjawab tebak kata.
@@ -137,9 +138,10 @@ async function promoteMember(chatId, userId, username) {
       can_pin_messages: true,
     });
 
+    // (PERBAIKAN 2) Menggunakan backticks (`) untuk nama agar aman dari error parsing
     return {
       success: true,
-      message: `✅ Berhasil! ${username} sekarang adalah admin.`,
+      message: `✅ Berhasil! \`${username}\` sekarang adalah admin.`,
     };
   } catch (error) {
     console.error("Error promoting member:", error);
@@ -182,9 +184,10 @@ async function demoteMember(chatId, userId, username) {
       can_pin_messages: false,
     });
 
+    // (PERBAIKAN 2) Menggunakan backticks (`) untuk nama agar aman dari error parsing
     return {
       success: true,
-      message: `✅ Berhasil! ${username} sekarang adalah member biasa.`,
+      message: `✅ Berhasil! \`${username}\` sekarang adalah member biasa.`,
     };
   } catch (error) {
     console.error("Error demoting member:", error);
@@ -208,14 +211,10 @@ bot.on("message", (msg) => {
 
   if (!text) return; // Abaikan jika bukan pesan teks (stiker, foto, dll)
 
-  // ===============================================
-  // (PERBAIKAN 1) PENGECEKAN PERINTAH HARUS DIDAHULUKAN
-  // Jika ini adalah perintah, biarkan listener 'onText' yang menanganinya.
-  // Ini mencegah sapaan (reply/mention) memblokir perintah /jawab.
+  // Pengecekan perintah harus didahulukan
   if (text.startsWith("/")) {
     return;
   }
-  // ===============================================
 
   // Cek jika pesan dari event 'new_chat_members' atau 'left_chat_member'
   if (msg.new_chat_members || msg.left_chat_member) {
@@ -246,12 +245,13 @@ bot.on("message", (msg) => {
     }
 
     if (repliedToBot || mentionedBot) {
+      // (PERBAIKAN 2) Menggunakan backticks (`) untuk nama agar aman dari error parsing
       const sapaan = [
         "Halo! Ada yang bisa saya bantu?",
         "Ya, saya di sini.",
-        `Kenapa, ${
+        `Kenapa, \`${
           username ? "@" + username : msg.from.first_name
-        }? 😜 Ada apa?`,
+        }\`? 😜 Ada apa?`,
         "Siap! Ada perlu apa?",
         "Dipanggil, komandan! 🫡",
       ];
@@ -259,6 +259,7 @@ bot.on("message", (msg) => {
 
       bot.sendMessage(chatId, randomSapaan, {
         reply_to_message_id: msg.message_id,
+        parse_mode: "Markdown", // (PERBAIKAN 2) Menambahkan parse_mode
       });
       return; // Hentikan di sini SETELAH sapaan dikirim
     }
@@ -274,8 +275,6 @@ bot.on("message", (msg) => {
     }
     groupMembers[chatId][userId] = username;
   }
-
-  // (Bagian 'if (text.startsWith("/"))' sudah dipindah ke atas)
 
   if (msg.reply_to_message) {
     return;
@@ -323,7 +322,8 @@ bot.onText(/\/promote/, async (msg) => {
       : targetUser.first_name;
 
     const result = await promoteMember(chatId, targetUser.id, username);
-    return bot.sendMessage(chatId, result.message);
+    // (PERBAIKAN 2) Menambahkan parse_mode untuk menampilkan pesan hasil
+    return bot.sendMessage(chatId, result.message, { parse_mode: "Markdown" });
   } else {
     return bot.sendMessage(
       chatId,
@@ -366,7 +366,8 @@ bot.onText(/\/demote/, async (msg) => {
       : targetUser.first_name;
 
     const result = await demoteMember(chatId, targetUser.id, username);
-    return bot.sendMessage(chatId, result.message);
+    // (PERBAIKAN 2) Menambahkan parse_mode untuk menampilkan pesan hasil
+    return bot.sendMessage(chatId, result.message, { parse_mode: "Markdown" });
   } else {
     return bot.sendMessage(
       chatId,
@@ -426,7 +427,6 @@ bot.onText(/\/tagall/, async (msg) => {
   messageText += userTags.join(" ");
 
   try {
-    // (PERBAIKAN 2) Menambahkan parse_mode: "Markdown" untuk memperbaiki error "can't parse entities"
     await bot.sendMessage(chatId, messageText, { parse_mode: "Markdown" });
   } catch (error) {
     console.error("Error sending tagall:", error);
@@ -503,14 +503,15 @@ bot.on("new_chat_members", (msg) => {
   msg.new_chat_members.forEach((member) => {
     const name = member.username ? `@${member.username}` : member.first_name;
 
+    // (PERBAIKAN 2) Menggunakan backticks (`) untuk nama agar aman dari error parsing
     const welcomeMessage = `
-Selamat datang di grup, ${name}! 👋
+Selamat datang di grup, \`${name}\`! 👋
 
 Senang kamu bergabung. Jangan lupa baca peraturan grup, ya!
 (Jika ada peraturan, hehe)
 `;
 
-    bot.sendMessage(chatId, welcomeMessage);
+    bot.sendMessage(chatId, welcomeMessage, { parse_mode: "Markdown" });
   });
 });
 
@@ -520,12 +521,13 @@ bot.on("left_chat_member", (msg) => {
 
   const name = member.username ? `@${member.username}` : member.first_name;
 
+  // (PERBAIKAN 2) Menggunakan backticks (`) untuk nama agar aman dari error parsing
   const goodbyeMessage = `
-Yah, ${name} telah meninggalkan grup. 😢
+Yah, \`${name}\` telah meninggalkan grup. 😢
 Sampai jumpa lagi di lain waktu!
 `;
 
-  bot.sendMessage(chatId, goodbyeMessage);
+  bot.sendMessage(chatId, goodbyeMessage, { parse_mode: "Markdown" });
 });
 
 // =============================
@@ -553,8 +555,9 @@ function createClue(word) {
   return clue.join(" ");
 }
 
-// Perintah: /mulai_tebak (Hanya Admin)
-bot.onText(/\/mulai_tebak/, async (msg) => {
+// Perintah: /mulaitebak (Hanya Admin)
+// (PERBAIKAN 1) Menghapus underscore agar konsisten
+bot.onText(/\/mulaitebak/, async (msg) => {
   const chatId = msg.chat.id;
 
   // 1. Cek jika di grup
@@ -579,7 +582,7 @@ bot.onText(/\/mulai_tebak/, async (msg) => {
   if (activeGames[chatId]) {
     return bot.sendMessage(
       chatId,
-      `Masih ada game yang berjalan! 🤨\nPetunjuk: \`${activeGames[chatId].clue}\`\n\nGunakan /stop_tebak untuk berhenti.`,
+      `Masih ada game yang berjalan! 🤨\nPetunjuk: \`${activeGames[chatId].clue}\`\n\nGunakan /stoptebak untuk berhenti.`,
       { parse_mode: "Markdown" }
     );
   }
@@ -616,7 +619,8 @@ bot.onText(/\/jawab(.+)/, (msg, match) => {
   if (!game) {
     return bot.sendMessage(
       chatId,
-      "Tidak ada game tebak kata yang sedang berjalan. Minta admin untuk /mulai_tebak.",
+      // (PERBAIKAN 1) Mengubah teks petunjuk
+      "Tidak ada game tebak kata yang sedang berjalan. Minta admin untuk /mulaitebak.",
       {
         reply_to_message_id: msg.message_id,
       }
@@ -641,7 +645,7 @@ bot.onText(/\/jawab(.+)/, (msg, match) => {
 Selamat kepada \`${winnerName}\`! 🥳
 Jawabannya adalah: \`${correctAnswer}\`
 
-Game selesai. Ketik /mulai_tebak untuk bermain lagi.
+Game selesai. Ketik /mulaitebak untuk bermain lagi.
     `,
       { parse_mode: "Markdown" }
     );
@@ -656,8 +660,9 @@ Game selesai. Ketik /mulai_tebak untuk bermain lagi.
   }
 });
 
-// Perintah: /stop_tebak (Hanya Admin)
-bot.onText(/\/stop_tebak/, async (msg) => {
+// Perintah: /stoptebak (Hanya Admin)
+// (PERBAIKAN 1) Menghapus underscore agar konsisten
+bot.onText(/\/stoptebak/, async (msg) => {
   const chatId = msg.chat.id;
 
   // 1. Cek jika user adalah admin
@@ -702,6 +707,7 @@ Jawabannya adalah: \`${correctAnswer}\`
 console.log("🤖 ADMIN BOT Sedang berjalan...");
 console.log("📋 Commands tersedia:");
 console.log("   /promote, /demote, /tagall, /checkbot");
-console.log("   /mulai_tebak, /stop_tebak, /jawab");
+// (PERBAIKAN 1) Mengubah nama perintah di log
+console.log("   /mulaitebak, /stoptebak, /jawab");
 console.log("   (Fitur Pasif) Sapaan jika di-mention atau di-reply.");
 console.log("   (Fitur Pasif) Sapaan member join/left.");
