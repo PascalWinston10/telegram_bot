@@ -469,14 +469,27 @@ bot.onText(/\/bot/, (msg) => {
     reply_markup: {
       inline_keyboard: [
         [
-          // Baris 1
+          // Baris 1: Game
           { text: "🎮 Mulai Tebak Kata", callback_data: "start_game" },
           { text: "🛑 Stop Tebak Kata", callback_data: "stop_game" },
         ],
         [
-          // Baris 2
+          // Baris 2: Admin Actions (Tombol Baru)
+          {
+            text: "⬆️ Promote (Tag)",
+            switch_inline_query_current_chat: "/promote @",
+          },
+          {
+            text: "⬇️ Demote (Tag)",
+            switch_inline_query_current_chat: "/demote @",
+          },
+        ],
+        [
+          // Baris 3: Info Bot
           { text: "📊 Cek Status Bot", callback_data: "check_bot" },
         ],
+        // Anda bisa menambahkan baris tombol lain di sini jika perlu
+        // [ { text: "Tombol Lain", callback_data: "fungsi_lain" } ]
       ],
     },
   };
