@@ -1,5 +1,5 @@
 // =============================
-// ADMIN BOT (Promote/Demote/Greeting/Tagall)
+// ADMIN BOT (Full Features)
 // Telegram Bot Version
 // =============================
 
@@ -20,40 +20,75 @@ if (!token) {
 // Jalankan bot dengan polling
 const bot = new TelegramBot(token, { polling: true });
 
-// (TAMBAHAN BARU) Variabel untuk menyimpan member aktif per grup
+// Info bot (diperlukan untuk cek reply/mention)
+let botUsername = "";
+let botId = null;
+
+bot
+  .getMe()
+  .then((me) => {
+    botUsername = me.username;
+    botId = me.id;
+    console.log(`Info bot berhasil dimuat: @${botUsername} (ID: ${botId})`);
+  })
+  .catch((err) => {
+    console.error("Kritis: Gagal mendapatkan info bot:", err);
+    process.exit(1);
+  });
+
+// Variabel untuk menyimpan member aktif per grup
 const groupMembers = {};
+
+// Variabel untuk Game Tebak Kata
+const wordList = [
+  "TELEGRAM",
+  "BOT",
+  "JAVASCRIPT",
+  "NODEJS",
+  "CODING",
+  "GITHUB",
+  "PROMOTE",
+  "DEMOTE",
+  "ADMIN",
+  "GRUP",
+  "SERVER",
+  "FLYIO",
+];
+const activeGames = {};
 
 // =============================
 // Teks /start
 // =============================
 function sendStartMessage(chatId, chatType) {
   let text = `
-🤖 Halo! Saya adalah Bot Admin.
+🤖 Halo! Saya adalah Bot Admin & Game.
 
-Saya dapat membantu mengelola admin dan menyapa anggota baru di grup ini.
+*Perintah Admin:*
+/promote - (Balas) Promote jadi admin.
+/demote - (Balas) Demote admin.
+/tagall [pesan] - Mention semua member aktif.
+/checkbot - Cek status dan hak akses bot.
 
-*Perintah yang tersedia:*
-/promote - (Balas pesan user) untuk promote jadi admin.
-/demote - (Balas pesan user) untuk demote admin.
-/tagall [pesan] - (Admin) Mention semua member aktif.
-/checkbot - Cek status dan hak akses bot di grup ini.
+*Perintah Game (Admin):*
+/mulai_tebak - Memulai game tebak kata.
+/stop_tebak - Menghentikan paksa game tebak kata.
+
+*Perintah Game (Member):*
+/jawab [kata] - Untuk menjawab tebak kata.
 `;
 
-  // Pesan berbeda jika di private chat
   if (chatType !== "group" && chatType !== "supergroup") {
     text =
-      "🤖 Halo! Saya adalah bot admin. Tambahkan saya ke grup untuk menggunakan semua fitur.";
+      "🤖 Halo! Saya adalah bot admin & game. Tambahkan saya ke grup untuk menggunakan semua fitur.";
   }
 
   bot.sendMessage(chatId, text, { parse_mode: "Markdown" });
 }
 
 // =============================
-// FUNGSI PROMOTE/DEMOTE MEMBER
-// (Kode ini tidak berubah)
+// FUNGSI UTAMA (ADMIN, SAPAAN, DLL)
 // =============================
 
-// Fungsi untuk cek apakah bot adalah admin dengan hak promote
 async function checkBotAdminRights(chatId) {
   try {
     const botInfo = await bot.getMe();
@@ -84,7 +119,6 @@ async function checkBotAdminRights(chatId) {
   }
 }
 
-// Fungsi untuk promote member
 async function promoteMember(chatId, userId, username) {
   try {
     const botCheck = await checkBotAdminRights(chatId);
@@ -130,7 +164,6 @@ async function promoteMember(chatId, userId, username) {
   }
 }
 
-// Fungsi untuk demote admin
 async function demoteMember(chatId, userId, username) {
   try {
     const botCheck = await checkBotAdminRights(chatId);
@@ -163,23 +196,75 @@ async function demoteMember(chatId, userId, username) {
   }
 }
 
-// =============================
-// COMMAND /START
-// =============================
 bot.onText(/\/start/, (msg) => {
   sendStartMessage(msg.chat.id, msg.chat.type);
 });
 
-// =============================
-// (MODIFIKASI) LOGGER & PENCATAT MEMBER
-// =============================
 bot.on("message", (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   const username = msg.from.username;
+  const text = msg.text;
 
-  // (TAMBAHAN BARU) Simpan data member untuk /tagall
-  // Hanya simpan jika di grup dan user punya username
+  if (!text) return; // Abaikan jika bukan pesan teks (stiker, foto, dll)
+
+  // ===============================================
+  // (PERBAIKAN 1) PENGECEKAN PERINTAH HARUS DIDAHULUKAN
+  // Jika ini adalah perintah, biarkan listener 'onText' yang menanganinya.
+  // Ini mencegah sapaan (reply/mention) memblokir perintah /jawab.
+  if (text.startsWith("/")) {
+    return;
+  }
+  // ===============================================
+
+  // Cek jika pesan dari event 'new_chat_members' atau 'left_chat_member'
+  if (msg.new_chat_members || msg.left_chat_member) {
+    return;
+  }
+
+  // Logika sapaan jika di-reply atau di-mention
+  if (botId && (msg.chat.type === "group" || msg.chat.type === "supergroup")) {
+    let repliedToBot = false;
+    let mentionedBot = false;
+
+    if (msg.reply_to_message && msg.reply_to_message.from.id === botId) {
+      repliedToBot = true;
+    }
+
+    if (msg.entities) {
+      msg.entities.forEach((entity) => {
+        if (entity.type === "mention") {
+          const mention = text.substring(
+            entity.offset,
+            entity.offset + entity.length
+          );
+          if (mention === `@${botUsername}`) {
+            mentionedBot = true;
+          }
+        }
+      });
+    }
+
+    if (repliedToBot || mentionedBot) {
+      const sapaan = [
+        "Halo! Ada yang bisa saya bantu?",
+        "Ya, saya di sini.",
+        `Kenapa, ${
+          username ? "@" + username : msg.from.first_name
+        }? 😜 Ada apa?`,
+        "Siap! Ada perlu apa?",
+        "Dipanggil, komandan! 🫡",
+      ];
+      const randomSapaan = sapaan[Math.floor(Math.random() * sapaan.length)];
+
+      bot.sendMessage(chatId, randomSapaan, {
+        reply_to_message_id: msg.message_id,
+      });
+      return; // Hentikan di sini SETELAH sapaan dikirim
+    }
+  }
+
+  // Menyimpan data member untuk /tagall
   if (
     (msg.chat.type === "group" || msg.chat.type === "supergroup") &&
     username
@@ -187,39 +272,23 @@ bot.on("message", (msg) => {
     if (!groupMembers[chatId]) {
       groupMembers[chatId] = {};
     }
-    // Simpan username berdasarkan userId untuk menghindari duplikat
     groupMembers[chatId][userId] = username;
   }
 
-  // Cek apakah pesan dari event 'new_chat_members' atau 'left_chat_member'
-  if (msg.new_chat_members || msg.left_chat_member) {
-    return;
-  }
+  // (Bagian 'if (text.startsWith("/"))' sudah dipindah ke atas)
 
-  // Abaikan jika itu adalah perintah (karena sudah ditangani oleh onText)
-  if (msg.text && msg.text.startsWith("/")) {
-    return;
-  }
-  // Abaikan jika itu balasan (ditangani oleh onReplyToMessage jika ada)
   if (msg.reply_to_message) {
     return;
   }
-  // Jangan respon apa-apa di private chat, biarkan /start yang menangani
   if (msg.chat.type === "private") {
     return;
   }
 
   console.log(
-    `Pesan dari @${username || msg.from.first_name} di grup ${chatId}: ${
-      msg.text
-    }`
+    `Pesan dari @${username || msg.from.first_name} di grup ${chatId}: ${text}`
   );
 });
 
-// =============================
-// COMMAND /PROMOTE
-// (Kode ini tidak berubah)
-// =============================
 bot.onText(/\/promote/, async (msg) => {
   const chatId = msg.chat.id;
   const chatType = msg.chat.type;
@@ -263,10 +332,6 @@ bot.onText(/\/promote/, async (msg) => {
   }
 });
 
-// =============================
-// COMMAND /DEMOTE
-// (Kode ini tidak berubah)
-// =============================
 bot.onText(/\/demote/, async (msg) => {
   const chatId = msg.chat.id;
   const chatType = msg.chat.type;
@@ -310,14 +375,10 @@ bot.onText(/\/demote/, async (msg) => {
   }
 });
 
-// =============================
-// (TAMBAHAN BARU) COMMAND /TAGALL
-// =============================
 bot.onText(/\/tagall/, async (msg) => {
   const chatId = msg.chat.id;
   const chatType = msg.chat.type;
 
-  // 1. Hanya bisa di grup
   if (chatType !== "group" && chatType !== "supergroup") {
     return bot.sendMessage(
       chatId,
@@ -325,7 +386,6 @@ bot.onText(/\/tagall/, async (msg) => {
     );
   }
 
-  // 2. Cek apakah user adalah admin
   try {
     const userMember = await bot.getChatMember(chatId, msg.from.id);
     if (
@@ -341,7 +401,6 @@ bot.onText(/\/tagall/, async (msg) => {
     return bot.sendMessage(chatId, "❌ Gagal mengecek status admin kamu.");
   }
 
-  // 3. Ambil daftar member yang tersimpan
   const members = groupMembers[chatId];
   if (!members || Object.keys(members).length === 0) {
     return bot.sendMessage(
@@ -350,29 +409,25 @@ bot.onText(/\/tagall/, async (msg) => {
     );
   }
 
-  // 4. Buat pesan tag
-  // Ambil pesan custom setelah /tagall
   const customMessage = msg.text.replace("/tagall", "").trim();
 
   let messageText = "";
   if (customMessage) {
-    messageText = `${customMessage}\n\n`; // Gunakan pesan custom jika ada
+    messageText = `${customMessage}\n\n`;
   } else {
-    messageText = "📣 *PANGGIL SEMUA MEMBER AKTIF!*\n\n"; // Pesan default
+    messageText = "📣 *PANGGIL SEMUA MEMBER AKTIF!*\n\n";
   }
 
   let userTags = [];
   for (const userId in members) {
-    // Kita tag menggunakan @username
     userTags.push(`@${members[userId]}`);
   }
 
   messageText += userTags.join(" ");
 
-  // 5. Kirim pesan
   try {
-    // Kirim pesan tanpa parse_mode Markdown untuk memastikan tag berfungsi
-    await bot.sendMessage(chatId, messageText);
+    // (PERBAIKAN 2) Menambahkan parse_mode: "Markdown" untuk memperbaiki error "can't parse entities"
+    await bot.sendMessage(chatId, messageText, { parse_mode: "Markdown" });
   } catch (error) {
     console.error("Error sending tagall:", error);
     await bot.sendMessage(
@@ -382,10 +437,6 @@ bot.onText(/\/tagall/, async (msg) => {
   }
 });
 
-// =============================
-// COMMAND /CHECKBOT
-// (Kode ini tidak berubah)
-// =============================
 bot.onText(/\/checkbot/, async (msg) => {
   const chatId = msg.chat.id;
   const chatType = msg.chat.type;
@@ -446,10 +497,6 @@ bot.onText(/\/checkbot/, async (msg) => {
   }
 });
 
-// =============================
-// GREETING MEMBER BARU
-// (Kode ini tidak berubah)
-// =============================
 bot.on("new_chat_members", (msg) => {
   const chatId = msg.chat.id;
 
@@ -460,17 +507,13 @@ bot.on("new_chat_members", (msg) => {
 Selamat datang di grup, ${name}! 👋
 
 Senang kamu bergabung. Jangan lupa baca peraturan grup, ya!
-Semoga Betah^_^🎉
+(Jika ada peraturan, hehe)
 `;
 
     bot.sendMessage(chatId, welcomeMessage);
   });
 });
 
-// =============================
-// PESAN MEMBER KELUAR
-// (Kode ini tidak berubah)
-// =============================
 bot.on("left_chat_member", (msg) => {
   const chatId = msg.chat.id;
   const member = msg.left_chat_member;
@@ -486,11 +529,179 @@ Sampai jumpa lagi di lain waktu!
 });
 
 // =============================
-// LOG STARTUP
+// FUNGSI GAME TEBAK KATA
 // =============================
-console.log("🤖 ADMIN BOT (Promote/Demote/Greeting/Tagall) Sedang berjalan...");
+
+// Fungsi untuk membuat petunjuk (misal: "TELEGRAM" -> "T _ L _ _ R A M")
+function createClue(word) {
+  // Tampilkan 2 huruf acak + huruf pertama dan terakhir
+  const chars = word.split("");
+  const clue = chars.map((char, index) => {
+    // Selalu tampilkan huruf pertama dan terakhir
+    if (index === 0 || index === chars.length - 1) {
+      return char;
+    }
+    // Tampilkan 2 huruf acak di tengah
+    if (
+      index === Math.floor(chars.length / 3) ||
+      index === Math.floor(chars.length / 2)
+    ) {
+      return char;
+    }
+    return "_";
+  });
+  return clue.join(" ");
+}
+
+// Perintah: /mulai_tebak (Hanya Admin)
+bot.onText(/\/mulai_tebak/, async (msg) => {
+  const chatId = msg.chat.id;
+
+  // 1. Cek jika di grup
+  if (msg.chat.type === "private") {
+    return bot.sendMessage(chatId, "Game hanya bisa dimainkan di grup!");
+  }
+
+  // 2. Cek jika user adalah admin
+  try {
+    const userMember = await bot.getChatMember(chatId, msg.from.id);
+    if (
+      userMember.status !== "administrator" &&
+      userMember.status !== "creator"
+    ) {
+      return bot.sendMessage(chatId, "❌ Hanya admin yang bisa memulai game!");
+    }
+  } catch (error) {
+    return bot.sendMessage(chatId, "❌ Gagal mengecek status admin kamu.");
+  }
+
+  // 3. Cek jika sudah ada game
+  if (activeGames[chatId]) {
+    return bot.sendMessage(
+      chatId,
+      `Masih ada game yang berjalan! 🤨\nPetunjuk: \`${activeGames[chatId].clue}\`\n\nGunakan /stop_tebak untuk berhenti.`,
+      { parse_mode: "Markdown" }
+    );
+  }
+
+  // 4. Memulai game
+  const randomWord = wordList[Math.floor(Math.random() * wordList.length)];
+  const clue = createClue(randomWord);
+
+  activeGames[chatId] = {
+    word: randomWord,
+    clue: clue,
+  };
+
+  bot.sendMessage(
+    chatId,
+    `
+🎮 *GAME TEBAK KATA DIMULAI!* 🎮
+
+Petunjuk: \`${clue}\`
+(${randomWord.length} huruf)
+
+Ketik \`/jawab [tebakanmu]\` untuk menjawab!
+  `,
+    { parse_mode: "Markdown" }
+  );
+});
+
+// Perintah: /jawab [kata] (Semua member)
+bot.onText(/\/jawab(.+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  const game = activeGames[chatId];
+
+  // 1. Cek jika ada game aktif
+  if (!game) {
+    return bot.sendMessage(
+      chatId,
+      "Tidak ada game tebak kata yang sedang berjalan. Minta admin untuk /mulai_tebak.",
+      {
+        reply_to_message_id: msg.message_id,
+      }
+    );
+  }
+
+  // 2. Ambil jawaban user
+  const userAnswer = match[1].trim().toUpperCase();
+  const correctAnswer = game.word;
+
+  // 3. Cek jawaban
+  if (userAnswer === correctAnswer) {
+    const winnerName = msg.from.username
+      ? `@${msg.from.username}`
+      : msg.from.first_name;
+
+    bot.sendMessage(
+      chatId,
+      `
+🎉 *BENAR!* 🎉
+
+Selamat kepada \`${winnerName}\`! 🥳
+Jawabannya adalah: \`${correctAnswer}\`
+
+Game selesai. Ketik /mulai_tebak untuk bermain lagi.
+    `,
+      { parse_mode: "Markdown" }
+    );
+
+    // Hapus game dari daftar aktif
+    delete activeGames[chatId];
+  } else {
+    // Jawaban salah
+    bot.sendMessage(chatId, "Masih salah, coba lagi! 🤨", {
+      reply_to_message_id: msg.message_id,
+    });
+  }
+});
+
+// Perintah: /stop_tebak (Hanya Admin)
+bot.onText(/\/stop_tebak/, async (msg) => {
+  const chatId = msg.chat.id;
+
+  // 1. Cek jika user adalah admin
+  try {
+    const userMember = await bot.getChatMember(chatId, msg.from.id);
+    if (
+      userMember.status !== "administrator" &&
+      userMember.status !== "creator"
+    ) {
+      return bot.sendMessage(
+        chatId,
+        "❌ Hanya admin yang bisa menghentikan game!"
+      );
+    }
+  } catch (error) {
+    return bot.sendMessage(chatId, "❌ Gagal mengecek status admin kamu.");
+  }
+
+  // 2. Cek jika ada game untuk distop
+  const game = activeGames[chatId];
+  if (game) {
+    const correctAnswer = game.word;
+    delete activeGames[chatId]; // Hentikan game
+    bot.sendMessage(
+      chatId,
+      `
+🛑 *Game Dihentikan Paksa!* 🛑
+
+Tidak ada yang berhasil menebak.
+Jawabannya adalah: \`${correctAnswer}\`
+    `,
+      { parse_mode: "Markdown" }
+    );
+  } else {
+    bot.sendMessage(chatId, "Tidak ada game yang sedang berjalan.");
+  }
+});
+
+// =============================
+// (MODIFIKASI) LOG STARTUP
+// =============================
+console.log("🤖 ADMIN BOT Sedang berjalan...");
 console.log("📋 Commands tersedia:");
-console.log("   /promote - Promote member jadi admin (reply ke user)");
-console.log("   /demote - Demote admin jadi member (reply ke user)");
-console.log("   /tagall [pesan] - (Admin) Mention semua member aktif");
-console.log("   /checkbot - Cek status dan hak akses bot");
+console.log("   /promote, /demote, /tagall, /checkbot");
+console.log("   /mulai_tebak, /stop_tebak, /jawab");
+console.log("   (Fitur Pasif) Sapaan jika di-mention atau di-reply.");
+console.log("   (Fitur Pasif) Sapaan member join/left.");
